@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/Kir-Khorev/finopp-back/internal/auth"
 	"github.com/Kir-Khorev/finopp-back/internal/common"
 	"github.com/Kir-Khorev/finopp-back/pkg/config"
 	"github.com/labstack/echo/v4"
@@ -50,16 +51,17 @@ func main() {
 		})
 	})
 
+	// Initialize Auth
+	authRepo := auth.NewRepository(db)
+	authService := auth.NewService(authRepo, cfg.JWTSecret)
+	authHandler := auth.NewHandler(authService)
+
 	// API routes
 	api := e.Group("/api/v1")
 	
-	// Auth routes (to be implemented)
-	api.POST("/auth/register", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{"message": "register endpoint"})
-	})
-	api.POST("/auth/login", func(c echo.Context) error {
-		return c.JSON(200, map[string]string{"message": "login endpoint"})
-	})
+	// Auth routes
+	api.POST("/auth/register", authHandler.Register)
+	api.POST("/auth/login", authHandler.Login)
 
 	// Start server
 	go func() {
