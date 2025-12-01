@@ -8,17 +8,18 @@ import (
 )
 
 type Config struct {
-	Port         string
-	Environment  string
-	DBHost       string
-	DBPort       string
-	DBUser       string
-	DBPassword   string
-	DBName       string
-	RedisHost    string
-	RedisPort    string
-	JWTSecret    string
-	GroqAPIKey   string
+	Port          string
+	Environment   string
+	DBHost        string
+	DBPort        string
+	DBUser        string
+	DBPassword    string
+	DBName        string
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+	JWTSecret     string
+	GroqAPIKey    string
 }
 
 func Load() *Config {
@@ -26,17 +27,18 @@ func Load() *Config {
 	_ = godotenv.Load()
 
 	return &Config{
-		Port:        getEnv("PORT", "8080"),
-		Environment: getEnv("ENV", "development"),
-		DBHost:      getEnv("DB_HOST", "localhost"),
-		DBPort:      getEnv("DB_PORT", "5432"),
-		DBUser:      getEnv("DB_USER", "finopp"),
-		DBPassword:  getEnv("DB_PASSWORD", "finopp_pass"),
-		DBName:      getEnv("DB_NAME", "finopp_db"),
-		RedisHost:   getEnv("REDIS_HOST", "localhost"),
-		RedisPort:   getEnv("REDIS_PORT", "6379"),
-		JWTSecret:   getEnv("JWT_SECRET", "change-me-in-production"),
-		GroqAPIKey:  getEnv("GROQ_API_KEY", ""),
+		Port:          getEnv("PORT", "8080"),
+		Environment:   getEnv("ENV", "development"),
+		DBHost:        getEnv("DB_HOST", "localhost"),
+		DBPort:        getEnv("DB_PORT", "5432"),
+		DBUser:        getEnv("DB_USER", "finopp"),
+		DBPassword:    getEnv("DB_PASSWORD", "finopp_pass"),
+		DBName:        getEnv("DB_NAME", "finopp_db"),
+		RedisHost:     getEnv("REDIS_HOST", "localhost"),
+		RedisPort:     getEnv("REDIS_PORT", "6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
+		GroqAPIKey:    getEnv("GROQ_API_KEY", ""),
 	}
 }
 
