@@ -10,9 +10,15 @@ import (
 )
 
 func InitDB(cfg *config.Config) (*sql.DB, error) {
+	// For production (Neon) - use SSL
+	sslMode := "disable"
+	if cfg.Environment == "production" {
+		sslMode = "require"
+	}
+
 	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName, sslMode,
 	)
 
 	db, err := sql.Open("postgres", dsn)
