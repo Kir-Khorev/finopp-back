@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/Kir-Khorev/finopp-back/internal/advice"
 	"github.com/Kir-Khorev/finopp-back/internal/auth"
 	"github.com/Kir-Khorev/finopp-back/internal/common"
 	"github.com/Kir-Khorev/finopp-back/pkg/config"
@@ -56,12 +57,20 @@ func main() {
 	authService := auth.NewService(authRepo, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authService)
 
+	// Initialize Advice
+	adviceService := advice.NewService(cfg.GroqAPIKey)
+	adviceHandler := advice.NewHandler(adviceService)
+
 	// API routes
 	api := e.Group("/api/v1")
 	
 	// Auth routes
 	api.POST("/auth/register", authHandler.Register)
 	api.POST("/auth/login", authHandler.Login)
+
+	// Advice routes
+	api.POST("/advice", adviceHandler.GetAdvice)
+	api.POST("/analyze", adviceHandler.Analyze)
 
 	// Start server
 	go func() {
