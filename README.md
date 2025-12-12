@@ -48,40 +48,40 @@ docker-compose down -v
 finopp-back/
 ├── cmd/
 │   └── api/
-│       └── main.go           # Application entry point - starts server
+│       └── main.go              # Application entry point
 │
-├── internal/                 # Private application code (not importable)
-│   ├── auth/                # Authentication & authorization
-│   │   ├── handler.go       # HTTP handlers (register, login)
-│   │   ├── service.go       # Business logic (JWT, passwords)
-│   │   ├── repository.go    # Database queries
-│   │   └── models.go        # Data structures
+├── internal/                    # Private application code
+│   ├── auth/                   # Authentication & authorization
+│   │   ├── handler.go          # HTTP handlers (register, login)
+│   │   ├── service.go          # Business logic (JWT, passwords)
+│   │   ├── repository.go       # Database queries
+│   │   └── models.go           # Data structures
 │   │
-│   ├── advice/              # AI advice feature
-│   │   ├── handler.go       # HTTP handler for /advice endpoint
-│   │   ├── service.go       # Groq API integration
-│   │   └── models.go        # Request/response types
+│   ├── advice/                 # AI advice feature
+│   │   ├── handler.go          # HTTP handler for /advice endpoint
+│   │   ├── service.go          # Groq API integration
+│   │   └── models.go           # Request/response types
 │   │
-│   ├── users/               # User management (planned)
-│   ├── finance/             # Financial profiles (planned)
-│   ├── analytics/           # Analytics (planned)
+│   ├── middleware/             # Custom middleware
+│   │   ├── auth.go            # JWT authentication middleware
+│   │   └── error.go           # Error handling middleware
 │   │
-│   └── common/              # Shared utilities
-│       ├── db.go           # PostgreSQL connection + migrations
-│       └── redis.go        # Redis connection
+│   └── common/                 # Shared utilities
+│       ├── db.go              # PostgreSQL connection + migrations
+│       └── redis.go           # Redis connection
 │
-├── pkg/                     # Public libraries (importable by other projects)
+├── pkg/                        # Public libraries
 │   ├── config/
-│   │   └── config.go       # Environment variable loading
-│   └── logger/             # Logging utilities
+│   │   └── config.go          # Environment variable loading
+│   └── errors/
+│       └── errors.go          # Structured error handling
 │
-├── migrations/              # SQL migration files (if using migrate tool)
-├── docker-compose.yml       # Defines 3 services: api, postgres, redis
-├── Dockerfile              # Multi-stage build for Go API
-├── .env.example            # Template for environment variables
-├── .env                    # Actual secrets (NEVER COMMIT THIS)
-├── go.mod                  # Go module definition
-└── go.sum                  # Dependency checksums
+├── docker-compose.yml          # Defines 3 services: api, postgres, redis
+├── Dockerfile                  # Multi-stage build for Go API
+├── .env.example               # Template for environment variables
+├── .env                       # Actual secrets (NEVER COMMIT THIS)
+├── go.mod                     # Go module definition
+└── go.sum                     # Dependency checksums
 ```
 
 ---
@@ -103,10 +103,13 @@ finopp-back/
   - Body: `{ "question": "Что такое инвестиции?" }`
   - Returns: `{ "answer": "..." }`
 
-### Coming Soon
-- Profile management (`/api/v1/profile`)
-- Financial data tracking
-- Analytics
+### Protected Routes (with JWT)
+Currently all endpoints are public. To protect routes, use the auth middleware:
+```go
+protected := api.Group("")
+protected.Use(appMiddleware.AuthMiddleware(cfg.JWTSecret))
+protected.GET("/profile", profileHandler.GetProfile)
+```
 
 ---
 
@@ -195,9 +198,13 @@ SELECT * FROM users;
 
 ### Migrations
 
-Currently migrations run automatically on startup via `common.RunMigrations()`.
+Migrations run automatically on startup via `common.RunMigrations()`.
 
-**Migration is in:** `internal/common/db.go`
+**Current tables:**
+- `users` - User accounts (email, password, name)
+- `profiles` - Financial profiles (income, expenses, goals)
+- `advice_sessions` - AI conversation sessions
+- `advice_messages` - Individual messages in sessions
 
 **To add new table:**
 1. Edit `RunMigrations()` in `internal/common/db.go`
@@ -399,19 +406,22 @@ Deploy to:
 - **Echo framework:** Similar to Express.js (if you know Node)
 - **No ORM:** Raw SQL queries (simple, fast, clear)
 - **Migrations:** Auto-run on startup (see `internal/common/db.go`)
-- **CORS:** Enabled for all origins (dev only - restrict in prod!)
-- **Errors:** Return JSON with `{"error": "message"}` format
-- **Logging:** Uses Echo's built-in logger + `log` package
+- **Error handling:** Structured via `pkg/errors` package
+- **Middleware:** JWT auth, error handling, request logging
+- **CORS:** Configured for Vercel frontend + localhost
+- **Security:** Bcrypt passwords, JWT tokens, prepared statements
 
 ---
 
 ## 🎯 Roadmap
 
-- [ ] Add comprehensive tests
-- [ ] JWT authentication middleware
+- [x] JWT authentication middleware
+- [x] Structured error handling
+- [x] Request logging
+- [ ] Unit & integration tests
 - [ ] User profile endpoints
 - [ ] Financial data tracking
-- [ ] Analytics endpoints
-- [ ] Rate limiting
-- [ ] API documentation (Swagger)
+- [ ] Rate limiting (Redis-based)
+- [ ] API documentation (Swagger/OpenAPI)
 - [ ] CI/CD pipeline
+- [ ] Monitoring & alerting

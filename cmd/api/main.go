@@ -10,6 +10,7 @@ import (
 	"github.com/Kir-Khorev/finopp-back/internal/advice"
 	"github.com/Kir-Khorev/finopp-back/internal/auth"
 	"github.com/Kir-Khorev/finopp-back/internal/common"
+	appMiddleware "github.com/Kir-Khorev/finopp-back/internal/middleware"
 	"github.com/Kir-Khorev/finopp-back/pkg/config"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -38,17 +39,23 @@ func main() {
 	// Setup Echo
 	e := echo.New()
 	e.HideBanner = true
+	
+	// Custom error handler
+	e.HTTPErrorHandler = appMiddleware.ErrorHandler
 
-	// Middleware
-	e.Use(middleware.Logger())
+	// Global middleware
 	e.Use(middleware.Recover())
+	e.Use(appMiddleware.RequestLogger())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
 			"https://finopp-front.vercel.app",
 			"http://localhost:3000",
+			"http://localhost:5173", // Vite dev server
 		},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{"Content-Type", "Authorization"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           86400, // 24 hours
 	}))
 
 	// Health check
@@ -71,13 +78,19 @@ func main() {
 	// API routes
 	api := e.Group("/api/v1")
 	
-	// Auth routes
-	api.POST("/auth/register", authHandler.Register)
-	api.POST("/auth/login", authHandler.Login)
+	// Public auth routes
+	auth := api.Group("/auth")
+	auth.POST("/register", authHandler.Register)
+	auth.POST("/login", authHandler.Login)
 
-	// Advice routes
-	api.POST("/advice", adviceHandler.GetAdvice)
-	api.POST("/analyze", adviceHandler.Analyze)
+	// Public advice routes (опционально можно защитить через middleware)
+	api.POST("/advice", adviceHandler.GetAdvice, appMiddleware.OptionalAuthMiddleware(cfg.JWTSecret))
+	api.POST("/analyze", adviceHandler.Analyze, appMiddleware.OptionalAuthMiddleware(cfg.JWTSecret))
+	
+	// Protected routes example (раскомментировать когда добавятся эндпоинты)
+	// protected := api.Group("")
+	// protected.Use(appMiddleware.AuthMiddleware(cfg.JWTSecret))
+	// protected.GET("/profile", profileHandler.GetProfile)
 
 	// Start server
 	go func() {

@@ -1,8 +1,7 @@
 package auth
 
 import (
-	"net/http"
-
+	apperrors "github.com/Kir-Khorev/finopp-back/pkg/errors"
 	"github.com/labstack/echo/v4"
 )
 
@@ -17,36 +16,28 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) Register(c echo.Context) error {
 	var req RegisterRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return apperrors.ErrBadRequest
 	}
 
 	resp, err := h.service.Register(req)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": err.Error(),
-		})
+		return err
 	}
 
-	return c.JSON(http.StatusCreated, resp)
+	return c.JSON(201, resp)
 }
 
 func (h *Handler) Login(c echo.Context) error {
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return apperrors.ErrBadRequest
 	}
 
 	resp, err := h.service.Login(req)
 	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": err.Error(),
-		})
+		return err
 	}
 
-	return c.JSON(http.StatusOK, resp)
+	return c.JSON(200, resp)
 }
 

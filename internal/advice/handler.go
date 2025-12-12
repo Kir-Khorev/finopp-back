@@ -1,8 +1,7 @@
 package advice
 
 import (
-	"net/http"
-
+	apperrors "github.com/Kir-Khorev/finopp-back/pkg/errors"
 	"github.com/labstack/echo/v4"
 )
 
@@ -17,25 +16,19 @@ func NewHandler(service *Service) *Handler {
 func (h *Handler) GetAdvice(c echo.Context) error {
 	var req AdviceRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request body",
-		})
+		return apperrors.ErrBadRequest
 	}
 
 	if req.Question == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Пожалуйста, введите вопрос.",
-		})
+		return apperrors.NewWithDetails(400, "Пожалуйста, введите вопрос", "question field is required")
 	}
 
 	answer, err := h.service.GetAdvice(req.Question)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": err.Error(),
-		})
+		return err
 	}
 
-	return c.JSON(http.StatusOK, AdviceResponse{
+	return c.JSON(200, AdviceResponse{
 		Answer: answer,
 	})
 }
@@ -43,25 +36,19 @@ func (h *Handler) GetAdvice(c echo.Context) error {
 func (h *Handler) Analyze(c echo.Context) error {
 	var req AnalysisRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Неверный формат запроса",
-		})
+		return apperrors.NewWithDetails(400, "Неверный формат запроса", err.Error())
 	}
 
 	// Валидация обязательных полей
 	if req.Status == "" || req.Expenses == "" || req.Income == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Пожалуйста, заполните все обязательные поля (статус, расходы, доходы)",
-		})
+		return apperrors.NewWithDetails(400, "Пожалуйста, заполните все обязательные поля", "status, expenses, and income are required")
 	}
 
 	result, err := h.service.AnalyzeFinances(req)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
-			"error": err.Error(),
-		})
+		return err
 	}
 
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(200, result)
 }
 

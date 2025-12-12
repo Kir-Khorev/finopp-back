@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	apperrors "github.com/Kir-Khorev/finopp-back/pkg/errors"
 )
 
 type Service struct {
@@ -46,7 +49,7 @@ type groqResponse struct {
 
 func (s *Service) GetAdvice(question string) (string, error) {
 	if s.groqAPIKey == "" {
-		return "", fmt.Errorf("API ключ Groq не настроен на сервере")
+		return "", apperrors.ErrGroqAPIUnavailable
 	}
 
 	reqBody := groqRequest{
@@ -61,12 +64,12 @@ func (s *Service) GetAdvice(question string) (string, error) {
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("ошибка сериализации запроса: %w", err)
+		return "", apperrors.Wrap(err, "Ошибка сериализации запроса")
 	}
 
 	req, err := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("ошибка создания запроса: %w", err)
+		return "", apperrors.Wrap(err, "Ошибка создания запроса")
 	}
 
 	req.Header.Set("Authorization", "Bearer "+s.groqAPIKey)
@@ -74,30 +77,30 @@ func (s *Service) GetAdvice(question string) (string, error) {
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("ошибка запроса к Groq API: %w", err)
+		return "", apperrors.ErrGroqAPIUnavailable
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("ошибка чтения ответа: %w", err)
+		return "", apperrors.Wrap(err, "Ошибка чтения ответа")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Groq API вернул ошибку: %s (код %d)", string(body), resp.StatusCode)
+		return "", apperrors.NewWithDetails(503, "Groq API недоступен", fmt.Sprintf("status: %d, body: %s", resp.StatusCode, string(body)))
 	}
 
 	var groqResp groqResponse
 	if err := json.Unmarshal(body, &groqResp); err != nil {
-		return "", fmt.Errorf("ошибка десериализации ответа: %w", err)
+		return "", apperrors.Wrap(err, "Ошибка десериализации ответа")
 	}
 
 	if groqResp.Error != nil {
-		return "", fmt.Errorf("ошибка от Groq: %s", groqResp.Error.Message)
+		return "", apperrors.NewWithDetails(503, "Ошибка от Groq", groqResp.Error.Message)
 	}
 
 	if len(groqResp.Choices) == 0 {
-		return "", fmt.Errorf("модель не вернула текст ответа")
+		return "", apperrors.New(503, "Модель не вернула текст ответа")
 	}
 
 	answer := groqResp.Choices[0].Message.Content
@@ -111,7 +114,7 @@ func (s *Service) GetAdvice(question string) (string, error) {
 // AnalyzeFinances анализирует финансовую ситуацию пользователя
 func (s *Service) AnalyzeFinances(req AnalysisRequest) (AnalysisResponse, error) {
 	if s.groqAPIKey == "" {
-		return AnalysisResponse{}, fmt.Errorf("API ключ Groq не настроен на сервере")
+		return AnalysisResponse{}, apperrors.ErrGroqAPIUnavailable
 	}
 
 	// Формируем промпт с инструкциями для ИИ
@@ -165,12 +168,12 @@ func (s *Service) AnalyzeFinances(req AnalysisRequest) (AnalysisResponse, error)
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка сериализации запроса: %w", err)
+		return AnalysisResponse{}, apperrors.Wrap(err, "Ошибка сериализации запроса")
 	}
 
 	httpReq, err := http.NewRequest("POST", "https://api.groq.com/openai/v1/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка создания запроса: %w", err)
+		return AnalysisResponse{}, apperrors.Wrap(err, "Ошибка создания запроса")
 	}
 
 	httpReq.Header.Set("Authorization", "Bearer "+s.groqAPIKey)
@@ -178,35 +181,35 @@ func (s *Service) AnalyzeFinances(req AnalysisRequest) (AnalysisResponse, error)
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка запроса к Groq API: %w", err)
+		return AnalysisResponse{}, apperrors.ErrGroqAPIUnavailable
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка чтения ответа: %w", err)
+		return AnalysisResponse{}, apperrors.Wrap(err, "Ошибка чтения ответа")
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return AnalysisResponse{}, fmt.Errorf("Groq API вернул ошибку: %s (код %d)", string(body), resp.StatusCode)
+		return AnalysisResponse{}, apperrors.NewWithDetails(503, "Groq API недоступен", fmt.Sprintf("status: %d", resp.StatusCode))
 	}
 
 	var groqResp groqResponse
 	if err := json.Unmarshal(body, &groqResp); err != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка десериализации ответа: %w", err)
+		return AnalysisResponse{}, apperrors.Wrap(err, "Ошибка десериализации ответа")
 	}
 
 	if groqResp.Error != nil {
-		return AnalysisResponse{}, fmt.Errorf("ошибка от Groq: %s", groqResp.Error.Message)
+		return AnalysisResponse{}, apperrors.NewWithDetails(503, "Ошибка от Groq", groqResp.Error.Message)
 	}
 
 	if len(groqResp.Choices) == 0 {
-		return AnalysisResponse{}, fmt.Errorf("модель не вернула текст ответа")
+		return AnalysisResponse{}, apperrors.New(503, "Модель не вернула текст ответа")
 	}
 
 	answer := groqResp.Choices[0].Message.Content
 	if answer == "" {
-		return AnalysisResponse{}, fmt.Errorf("модель вернула пустой ответ")
+		return AnalysisResponse{}, apperrors.New(503, "Модель вернула пустой ответ")
 	}
 
 	// Парсим ответ (ищем БАЛАНС: и СОВЕТ:)
@@ -215,91 +218,38 @@ func (s *Service) AnalyzeFinances(req AnalysisRequest) (AnalysisResponse, error)
 
 // parseAnalysisResponse извлекает баланс и совет из ответа ИИ
 func parseAnalysisResponse(text string) AnalysisResponse {
+	// Ищем маркеры с помощью strings.Split
+	balanceMarker := "===BALANCE==="
+	adviceMarker := "===ADVICE==="
+
 	balance := ""
 	advice := ""
 
-	// Простой парсинг по маркерам
-	lines := splitLines(text)
-	section := ""
-
-	for _, line := range lines {
-		trimmed := trim(line)
-		
-		if contains(trimmed, "===BALANCE===") {
-			section = "balance"
-			continue
-		}
-		
-		if contains(trimmed, "===ADVICE===") {
-			section = "advice"
-			continue
-		}
-
-		if trimmed == "" {
-			continue
-		}
-
-		if section == "balance" {
-			if balance != "" {
-				balance += "\n"
+	// Разбиваем текст по маркерам
+	if strings.Contains(text, balanceMarker) && strings.Contains(text, adviceMarker) {
+		parts := strings.Split(text, balanceMarker)
+		if len(parts) > 1 {
+			afterBalance := parts[1]
+			adviceParts := strings.Split(afterBalance, adviceMarker)
+			
+			if len(adviceParts) > 1 {
+				balance = strings.TrimSpace(adviceParts[0])
+				advice = strings.TrimSpace(adviceParts[1])
 			}
-			balance += trimmed
-		} else if section == "advice" {
-			if advice != "" {
-				advice += "\n"
-			}
-			advice += trimmed
 		}
 	}
 
-	// Если парсинг не сработал, возвращаем весь текст
+	// Если парсинг не сработал, возвращаем весь текст как совет
 	if balance == "" && advice == "" {
 		return AnalysisResponse{
-			Balance: "Не удалось извлечь данные",
-			Advice:  text,
+			Balance: "Данные недоступны",
+			Advice:  strings.TrimSpace(text),
 		}
 	}
 
 	return AnalysisResponse{
-		Balance: trim(balance),
-		Advice:  trim(advice),
+		Balance: balance,
+		Advice:  advice,
 	}
-}
-
-// Вспомогательные функции для парсинга
-func splitLines(s string) []string {
-	var lines []string
-	current := ""
-	for _, char := range s {
-		if char == '\n' {
-			lines = append(lines, current)
-			current = ""
-		} else {
-			current += string(char)
-		}
-	}
-	if current != "" {
-		lines = append(lines, current)
-	}
-	return lines
-}
-
-func trim(s string) string {
-	start := 0
-	end := len(s)
-	
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r') {
-		start++
-	}
-	
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\r') {
-		end--
-	}
-	
-	return s[start:end]
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[:len(substr)] == substr
 }
 
