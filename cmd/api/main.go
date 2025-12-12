@@ -48,7 +48,8 @@ func main() {
 	e.Use(appMiddleware.RequestLogger())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{
-			"https://finopp-front.vercel.app",
+			"https://servify.digital",        // Production (new domain)
+			"https://finopp-front.vercel.app", // Production (old domain)
 			"http://localhost:3000",
 			"http://localhost:5173", // Vite dev server
 		},
