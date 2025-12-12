@@ -6,16 +6,15 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git
 
-# Copy go mod files
-COPY go.mod ./
-RUN go mod download && go mod tidy
+# Copy go mod files first (better layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
 
 # Copy source code
 COPY . .
-RUN go mod tidy
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/api ./cmd/api
+# Build with optimizations
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/api ./cmd/api
 
 # Runtime stage
 FROM alpine:latest

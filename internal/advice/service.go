@@ -6,15 +6,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Service struct {
 	groqAPIKey string
+	httpClient *http.Client
 }
 
 func NewService(groqAPIKey string) *Service {
 	return &Service{
 		groqAPIKey: groqAPIKey,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -67,8 +72,7 @@ func (s *Service) GetAdvice(question string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+s.groqAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("ошибка запроса к Groq API: %w", err)
 	}
@@ -172,8 +176,7 @@ func (s *Service) AnalyzeFinances(req AnalysisRequest) (AnalysisResponse, error)
 	httpReq.Header.Set("Authorization", "Bearer "+s.groqAPIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(httpReq)
+	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		return AnalysisResponse{}, fmt.Errorf("ошибка запроса к Groq API: %w", err)
 	}

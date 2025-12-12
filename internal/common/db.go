@@ -30,8 +30,14 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
+	// Connection pool settings
+	if cfg.Environment == "production" {
+		db.SetMaxOpenConns(10) // Render free tier ограничения
+		db.SetMaxIdleConns(2)
+	} else {
+		db.SetMaxOpenConns(25)
+		db.SetMaxIdleConns(5)
+	}
 
 	log.Println("✅ Database connected")
 	return db, nil
