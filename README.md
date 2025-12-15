@@ -102,6 +102,10 @@ finopp-back/
 - **POST** `/api/v1/advice` - Get financial advice from AI
   - Body: `{ "question": "Что такое инвестиции?" }`
   - Returns: `{ "answer": "..." }`
+- **POST** `/api/v1/advice/structured` - Get advice with automatic currency conversion
+  - Body: `{ "incomeSources": [...], "expenseSources": [...], "problems": [...] }`
+  - Converts all amounts to RUB using Fixer.io API
+  - Returns: `{ "answer": "..." }`
 
 ### Protected Routes (with JWT)
 Currently all endpoints are public. To protect routes, use the auth middleware:
@@ -294,6 +298,7 @@ go mod tidy
 **Required:**
 ```env
 GROQ_API_KEY=your_key_here    # Get from https://console.groq.com
+FIXER_API_KEY=your_key_here   # Get from https://fixer.io (for currency conversion)
 ```
 
 **Optional (defaults shown):**
@@ -418,6 +423,7 @@ Deploy to:
 - [x] JWT authentication middleware
 - [x] Structured error handling
 - [x] Request logging
+- [x] Currency conversion via Fixer.io (USD/EUR/KZT/AZN → RUB)
 - [ ] Unit & integration tests
 - [ ] User profile endpoints
 - [ ] Financial data tracking

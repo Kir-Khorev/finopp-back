@@ -20,6 +20,7 @@ type Config struct {
 	RedisPassword string
 	JWTSecret     string
 	GroqAPIKey    string
+	FixerAPIKey   string
 }
 
 func Load() *Config {
@@ -39,6 +40,7 @@ func Load() *Config {
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
 		GroqAPIKey:    getEnv("GROQ_API_KEY", ""),
+		FixerAPIKey:   getEnv("FIXER_API_KEY", ""),
 	}
 }
 

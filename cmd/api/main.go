@@ -10,6 +10,7 @@ import (
 	"github.com/Kir-Khorev/finopp-back/internal/advice"
 	"github.com/Kir-Khorev/finopp-back/internal/auth"
 	"github.com/Kir-Khorev/finopp-back/internal/common"
+	"github.com/Kir-Khorev/finopp-back/internal/currency"
 	appMiddleware "github.com/Kir-Khorev/finopp-back/internal/middleware"
 	"github.com/Kir-Khorev/finopp-back/pkg/config"
 	"github.com/labstack/echo/v4"
@@ -52,6 +53,7 @@ func main() {
 			"https://finopp-front.vercel.app", // Production (old domain)
 			"http://localhost:3000",
 			"http://localhost:5173", // Vite dev server
+			"http://localhost:8081", // Vite dev server (alternative port)
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Content-Type", "Authorization"},
@@ -72,8 +74,11 @@ func main() {
 	authService := auth.NewService(authRepo, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authService)
 
+	// Initialize Currency Converter
+	currencyService := currency.NewService(cfg.FixerAPIKey, rdb)
+
 	// Initialize Advice
-	adviceService := advice.NewService(cfg.GroqAPIKey)
+	adviceService := advice.NewService(cfg.GroqAPIKey, currencyService)
 	adviceHandler := advice.NewHandler(adviceService)
 
 	// API routes
@@ -86,6 +91,7 @@ func main() {
 
 	// Public advice routes (опционально можно защитить через middleware)
 	api.POST("/advice", adviceHandler.GetAdvice, appMiddleware.OptionalAuthMiddleware(cfg.JWTSecret))
+	api.POST("/advice/structured", adviceHandler.GetStructuredAdvice, appMiddleware.OptionalAuthMiddleware(cfg.JWTSecret))
 	api.POST("/analyze", adviceHandler.Analyze, appMiddleware.OptionalAuthMiddleware(cfg.JWTSecret))
 	
 	// Protected routes example (раскомментировать когда добавятся эндпоинты)

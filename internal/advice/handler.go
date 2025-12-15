@@ -52,3 +52,26 @@ func (h *Handler) Analyze(c echo.Context) error {
 	return c.JSON(200, result)
 }
 
+// GetStructuredAdvice обрабатывает структурированный запрос с автоматической конвертацией валют
+func (h *Handler) GetStructuredAdvice(c echo.Context) error {
+	var req StructuredAdviceRequest
+	if err := c.Bind(&req); err != nil {
+		return apperrors.NewWithDetails(400, "Неверный формат запроса", err.Error())
+	}
+
+	// Валидация: должен быть хотя бы 1 источник дохода и расхода
+	if len(req.IncomeSources) == 0 {
+		return apperrors.NewWithDetails(400, "Укажите хотя бы один источник дохода", "incomeSources is required")
+	}
+	if len(req.ExpenseSources) == 0 {
+		return apperrors.NewWithDetails(400, "Укажите хотя бы один источник расхода", "expenseSources is required")
+	}
+
+	result, err := h.service.GetStructuredAdvice(c.Request().Context(), req)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(200, result)
+}
+

@@ -2,6 +2,7 @@ package advice
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,17 +13,23 @@ import (
 	apperrors "github.com/Kir-Khorev/finopp-back/pkg/errors"
 )
 
-type Service struct {
-	groqAPIKey string
-	httpClient *http.Client
+type CurrencyConverter interface {
+	ConvertToRUB(ctx context.Context, amount float64, fromCurrency string) (float64, error)
 }
 
-func NewService(groqAPIKey string) *Service {
+type Service struct {
+	groqAPIKey        string
+	httpClient        *http.Client
+	currencyConverter CurrencyConverter
+}
+
+func NewService(groqAPIKey string, currencyConverter CurrencyConverter) *Service {
 	return &Service{
-		groqAPIKey: groqAPIKey,
+		groqAPIKey:        groqAPIKey,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		currencyConverter: currencyConverter,
 	}
 }
 
@@ -251,5 +258,194 @@ func parseAnalysisResponse(text string) AnalysisResponse {
 		Balance: balance,
 		Advice:  advice,
 	}
+}
+
+// GetStructuredAdvice обрабатывает структурированный запрос с конвертацией валют
+func (s *Service) GetStructuredAdvice(ctx context.Context, req StructuredAdviceRequest) (*StructuredAdviceResponse, error) {
+	if s.groqAPIKey == "" {
+		return nil, apperrors.ErrGroqAPIUnavailable
+	}
+
+	// Конвертируем все доходы в рубли
+	totalIncomeRUB := 0.0
+	incomeDetails := []string{}
+	for _, source := range req.IncomeSources {
+		if source.Amount <= 0 {
+			continue
+		}
+		
+		amountInRUB, err := s.currencyConverter.ConvertToRUB(ctx, source.Amount, source.Currency)
+		if err != nil {
+			return nil, apperrors.Wrap(err, "Ошибка конвертации валюты")
+		}
+		
+		totalIncomeRUB += amountInRUB
+		incomeDetails = append(incomeDetails, fmt.Sprintf("%s: %.2f ₽ (из %.2f %s)", 
+			getIncomeTypeLabel(source.Type), amountInRUB, source.Amount, source.Currency))
+	}
+
+	// Конвертируем все расходы в рубли
+	totalExpensesRUB := 0.0
+	expenseDetails := []string{}
+	for _, source := range req.ExpenseSources {
+		if source.Amount <= 0 {
+			continue
+		}
+		
+		amountInRUB, err := s.currencyConverter.ConvertToRUB(ctx, source.Amount, source.Currency)
+		if err != nil {
+			return nil, apperrors.Wrap(err, "Ошибка конвертации валюты")
+		}
+		
+		totalExpensesRUB += amountInRUB
+		expenseDetails = append(expenseDetails, fmt.Sprintf("%s: %.2f ₽ (из %.2f %s)", 
+			getExpenseTypeLabel(source.Type), amountInRUB, source.Amount, source.Currency))
+	}
+
+	balance := totalIncomeRUB - totalExpensesRUB
+
+	// Формируем промпт для AI
+	question := buildFinancePrompt(
+		totalIncomeRUB, 
+		totalExpensesRUB, 
+		balance, 
+		incomeDetails, 
+		expenseDetails, 
+		req.Problems, 
+		req.CustomProblem, 
+		req.AdditionalInfo,
+	)
+
+	// Отправляем в Groq
+	answer, err := s.GetAdvice(question)
+	if err != nil {
+		return nil, err
+	}
+
+	return &StructuredAdviceResponse{
+		Answer:           answer,
+		TotalIncomeRUB:   totalIncomeRUB,
+		TotalExpensesRUB: totalExpensesRUB,
+		BalanceRUB:       balance,
+	}, nil
+}
+
+// buildFinancePrompt создает промпт для AI на основе структурированных данных
+func buildFinancePrompt(
+	totalIncome, totalExpenses, balance float64,
+	incomeDetails, expenseDetails []string,
+	problems []string,
+	customProblem, additionalInfo string,
+) string {
+	var prompt strings.Builder
+
+	prompt.WriteString("Ты — опытный финансовый советник, который понимает проблемы людей с небольшим доходом. ")
+	prompt.WriteString("Говори просто, по-человечески, с заботой и без осуждения. Помоги этому человеку найти выход.\n\n")
+
+	prompt.WriteString("**Откуда приходят деньги (всё конвертировано в рубли):**\n")
+	for _, detail := range incomeDetails {
+		prompt.WriteString(detail + "\n")
+	}
+	prompt.WriteString(fmt.Sprintf("**ИТОГО доход: %.2f ₽/мес**\n\n", totalIncome))
+
+	prompt.WriteString("**Куда уходят деньги (всё конвертировано в рубли):**\n")
+	for _, detail := range expenseDetails {
+		prompt.WriteString(detail + "\n")
+	}
+	prompt.WriteString(fmt.Sprintf("**ИТОГО расход: %.2f ₽/мес**\n\n", totalExpenses))
+
+	// Эмпатичное реагирование на баланс
+	if balance < 0 {
+		prompt.WriteString(fmt.Sprintf("**⚠️ ВАЖНО:** Человек сейчас в минусе (дефицит %.2f ₽). Ему ОЧЕНЬ тяжело.\n", -balance))
+		prompt.WriteString("**Начни ответ с искреннего сочувствия и поддержки.** Признай что ситуация сложная, ")
+		prompt.WriteString("скажи что понимаешь как это выматывает. Покажи что ты на его стороне. ")
+		prompt.WriteString("Потом переходи к конкретным шагам выхода.\n\n")
+	} else if balance > 0 && balance < totalIncome*0.15 {
+		prompt.WriteString(fmt.Sprintf("**💪 Важный момент:** У человека небольшой плюс (остаётся %.2f ₽). Это РЕАЛЬНО здорово!\n", balance))
+		prompt.WriteString("**Обязательно похвали** в начале ответа. Скажи что он молодец. Поддержи и мотивируй продолжать.\n\n")
+	} else if balance >= totalIncome*0.15 {
+		prompt.WriteString(fmt.Sprintf("**🎉 Отличная новость:** У человека хороший остаток (%.2f ₽)! Это достойный результат.\n", balance))
+		prompt.WriteString("**Похвали и вдохнови** в начале. Он справляется лучше чем многие.\n\n")
+	}
+
+	if len(problems) > 0 {
+		prompt.WriteString("**Что давит больше всего:**\n")
+		for _, problem := range problems {
+			prompt.WriteString(fmt.Sprintf("- %s\n", getProblemLabel(problem)))
+		}
+		prompt.WriteString("\n")
+	}
+
+	if customProblem != "" {
+		prompt.WriteString(fmt.Sprintf("**В своих словах:** %s\n\n", customProblem))
+	}
+
+	if additionalInfo != "" {
+		prompt.WriteString(fmt.Sprintf("**Дополнительно:** %s\n\n", additionalInfo))
+	}
+
+	prompt.WriteString("---\n\n")
+	prompt.WriteString("Твоя задача:\n")
+	prompt.WriteString("1. **Начни с поддержки.** Признай, что ситуация сложная, но выход есть.\n")
+	prompt.WriteString("2. **Анализ без цифр и терминов.** Объясни простым языком, что происходит.\n")
+	prompt.WriteString("3. **Конкретные шаги.** Дай 3-5 реальных действий, которые можно сделать прямо сейчас.\n")
+	prompt.WriteString("4. **Говори \"вы\", \"вам\", \"можете\".** Как друг, который искренне хочет помочь.\n")
+	prompt.WriteString("5. **Без финансового жаргона.** Вместо \"дефицит бюджета\" — \"денег не хватает\".\n")
+	prompt.WriteString("6. **Надежда.** Покажи, что даже с таким доходом можно улучшить ситуацию.\n\n")
+	prompt.WriteString("Формат ответа: обычный текст с разделением на абзацы. Используй жирный текст (**важное**) и списки где нужно.")
+
+	return prompt.String()
+}
+
+// Вспомогательные функции для получения меток
+func getIncomeTypeLabel(t string) string {
+	labels := map[string]string{
+		"salary":         "💼 Зарплата",
+		"pension":        "👴 Пенсия",
+		"bonus":          "🎁 Премии",
+		"business":       "🏢 Бизнес/фриланс",
+		"rental":         "🏠 Аренда",
+		"children_help":  "👨‍👩‍👧 Помощь от близких",
+		"investments":    "📈 Инвестиции",
+		"other":          "📦 Другое",
+	}
+	if label, ok := labels[t]; ok {
+		return label
+	}
+	return t
+}
+
+func getExpenseTypeLabel(t string) string {
+	labels := map[string]string{
+		"food":      "🍔 Еда",
+		"utilities": "💡 Коммуналка",
+		"credit":    "💳 Кредиты",
+		"debt":      "📝 Долги",
+		"transport": "🚗 Транспорт",
+		"health":    "🏥 Здоровье",
+		"general":   "📊 Бытовое",
+		"other":     "📦 Другое",
+	}
+	if label, ok := labels[t]; ok {
+		return label
+	}
+	return t
+}
+
+func getProblemLabel(p string) string {
+	labels := map[string]string{
+		"debt":       "💳 Долги душат",
+		"budgeting":  "📅 До зарплаты не дотягиваю",
+		"expenses":   "💸 Деньги утекают",
+		"savings":    "💰 Хочу откладывать",
+		"emergency":  "😰 Боюсь ЧП",
+		"income":     "📉 Мало денег",
+		"retirement": "👴 Страшно за будущее",
+		"investing":  "📈 Хочу инвестировать",
+	}
+	if label, ok := labels[p]; ok {
+		return label
+	}
+	return p
 }
 
